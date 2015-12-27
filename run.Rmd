@@ -1,0 +1,67 @@
+---
+title: "Human Activity Recognition using Random Forest"
+author: "Hang Su"
+date: "December 27, 2015"
+output: html_document
+---
+
+In this project, We will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict their exercise manner. [Traing](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and [test](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv) data is downloaded from [this website](http://groupware.les.inf.puc-rio.br/ha).
+
+# Load data
+```{r}
+library(randomForest)
+traindata <- read.csv("pml-training.csv")
+testdata <- read.csv("pml-testing.csv")
+head(traindata[,15])
+```
+Load the data and take a look at it.
+
+# Building model
+As is shown before, many columns are empty or ```NA```. After checking all the columns, we select following features: ```{roll, pitch, yaw, total_accel} x {belt, arm, dumbbell, forearm}```, i.e. 16 in total.
+
+We Perform K-fold cross validation with k = 5.
+```{r}
+accuracy <- function(model,testset){sum(predict(fit, testset) == testset$classe)/nrow(testset)}
+
+set.seed(7)
+order <- sample(nrow(traindata), size = nrow(traindata), replace = FALSE)
+
+k <- 5
+nrowspercv <- nrow(traindata) / k
+for (i in 1:k){
+  part <- order[((i-1)*nrowspercv+1):min(i*nrowspercv, nrow(traindata))]
+  
+  fit <- randomForest(classe ~ roll_belt + pitch_belt + yaw_belt + total_accel_belt + roll_arm + pitch_arm + yaw_arm + total_accel_arm + roll_dumbbell + pitch_dumbbell + yaw_dumbbell + total_accel_dumbbell + roll_forearm + pitch_forearm + yaw_forearm + total_accel_forearm, method = "rf", data = traindata[-part,], nodesize=5, allowParallel=TRUE)
+  acc <- accuracy(fit, traindata[part,])
+  print(paste("cv", i, "acc:", acc * 100, "%"))
+}
+```
+
+# Out of sample error analysis
+As is shown in the previous section, accuracies on cross validation set are higher than 98%.
+
+We projection data points to 2-d space, and plot the location.
+```{r}
+library(ggplot2)
+qplot(total_accel_forearm, pitch_forearm, col = classe, data = traindata)
+```
+
+We could also analyze the features using ```featurePlot```.
+```{r}
+part <- order[1:nrowspercv]
+library(caret)
+featurePlot(x=traindata[part,c("roll_belt", "pitch_forearm", "total_accel_dumbbell", "yaw_forearm")], y=traindata$classe[part], plot = "pairs")
+```
+
+The expected out of sample error could be due to noises in sensors or differences between participants.
+
+# Predict output for test set
+Now, train a model with all the training data and predict for test data
+```{r}
+fit <- randomForest(classe ~ roll_belt + pitch_belt + yaw_belt + total_accel_belt + roll_arm + pitch_arm + yaw_arm + total_accel_arm + roll_dumbbell + pitch_dumbbell + yaw_dumbbell + total_accel_dumbbell + roll_forearm + pitch_forearm + yaw_forearm + total_accel_forearm, method = "rf", data = traindata, nodesize=5, allowParallel=TRUE)
+answers <- predict(fit, testdata)
+```
+Take a look at the answer
+```{r}
+answers
+```
